@@ -1,5 +1,5 @@
 (function () {
-  console.log("[BOOKING ADMIN v4 PRICE RULES SMART] LOADED");
+  console.log("[BOOKING ADMIN v5 MANUELL OPPDATERING] LOADED");
 
   var ALLOWED_PATH = "/sider/booking-admin";
   var path = String(window.location.pathname || "");
@@ -13,6 +13,7 @@
   var SUPABASE_URL = "https://fwztrnxhfvrlceicctlv.supabase.co";
   var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3enRybnhoZnZybGNlaWNjdGx2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTgwMjYsImV4cCI6MjA5NTI5NDAyNn0.q4QthdBWEtUi_Fdz_Ge88E_5CpJMtUvjWhMAa0R0zmE";
   var SUPABASE_JS = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+  var BOOKING_WORKER_URL = "https://gk-booking-admin.post-cd6.workers.dev";
 
   var PRODUCT_NAMES = {
     "1316": "Dart Bane A",
@@ -263,6 +264,153 @@
     });
   }
 
+
+  function getStoredAdminToken() {
+    try {
+      return localStorage.getItem("gk_booking_admin_worker_token_v1") || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function setStoredAdminToken(token) {
+    try {
+      localStorage.setItem("gk_booking_admin_worker_token_v1", token || "");
+    } catch (e) {}
+  }
+
+  function getSyncProducts() {
+    var vals = [];
+    document.querySelectorAll("input[name='gba-sync-product']:checked").forEach(function (cb) {
+      vals.push(cb.value);
+    });
+    return vals.length ? vals : ["all"];
+  }
+
+  function workerProductLabel(productId) {
+    if (productId === "all") return "Alle produkter";
+    return PRODUCT_NAMES[productId] || productId;
+  }
+
+  function runMaintainForProduct(productId, token) {
+    var url = BOOKING_WORKER_URL +
+      "/booking/maintain-40-days" +
+      "?product=" + encodeURIComponent(productId) +
+      "&apply=true" +
+      "&maxCreate=100" +
+      "&maxDelete=100" +
+      "&token=" + encodeURIComponent(token);
+
+    return fetch(url, { credentials: "omit" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        return {
+          productId: productId,
+          label: workerProductLabel(productId),
+          ok: !!(data && data.ok),
+          data: data
+        };
+      })
+      .catch(function (e) {
+        return {
+          productId: productId,
+          label: workerProductLabel(productId),
+          ok: false,
+          error: String(e && e.message ? e.message : e)
+        };
+      });
+  }
+
+  function renderSyncResults(results) {
+    var el = document.getElementById("gba-sync-results");
+    if (!el) return;
+
+    if (!results || !results.length) {
+      el.innerHTML = "";
+      return;
+    }
+
+    var html = "<div class='gba-table-wrap'><table class='gba-table'><thead><tr><th>Produkt</th><th>Status</th><th>Resultat</th></tr></thead><tbody>";
+
+    results.forEach(function (r) {
+      var d = r.data || {};
+      var summary = "";
+
+      if (r.error) {
+        summary = r.error;
+      } else if (d.reports && Array.isArray(d.reports)) {
+        summary = d.reports.map(function (rep) {
+          return [
+            rep.productName || rep.productId || "",
+            "mangler: " + (rep.missingTotal || rep.missing || 0),
+            "prisavvik: " + (rep.priceMismatchTotal || rep.priceMismatch || 0),
+            "utløpt: " + (rep.expiredTotal || rep.expired || 0)
+          ].join(" · ");
+        }).join("<br>");
+      } else {
+        summary = esc(JSON.stringify(d).slice(0, 500));
+      }
+
+      html += "<tr>" +
+        "<td><strong>" + esc(r.label) + "</strong></td>" +
+        "<td>" + (r.ok ? "<span class='gba-pill price'>OK</span>" : "<span class='gba-pill closed'>Feil</span>") + "</td>" +
+        "<td>" + summary + "</td>" +
+      "</tr>";
+    });
+
+    html += "</tbody></table></div>";
+    el.innerHTML = html;
+  }
+
+  function runManualSync() {
+    var tokenEl = document.getElementById("gba-worker-token");
+    var btn = document.getElementById("gba-sync-now");
+    var msgId = "gba-sync-msg";
+    var token = String(tokenEl && tokenEl.value || "").trim();
+    var products = getSyncProducts();
+
+    if (!token) {
+      setMsg(msgId, "Lim inn ADMIN_TOKEN først. Den lagres kun lokalt i nettleseren din.", "bad");
+      return;
+    }
+
+    setStoredAdminToken(token);
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Oppdaterer…";
+    }
+
+    setMsg(msgId, "Oppdaterer bookingprodukter. Dette kan ta litt tid…", "");
+
+    var chain = Promise.resolve([]);
+    products.forEach(function (productId) {
+      chain = chain.then(function (results) {
+        return runMaintainForProduct(productId, token).then(function (result) {
+          results.push(result);
+          renderSyncResults(results);
+          return results;
+        });
+      });
+    });
+
+    chain.then(function (results) {
+      var failed = results.filter(function (r) { return !r.ok; }).length;
+
+      if (failed) {
+        setMsg(msgId, "Oppdatering fullført, men " + failed + " produkt(er) feilet. Se resultatlisten under.", "bad");
+      } else {
+        setMsg(msgId, "Oppdatering fullført. Bookingproduktene er synket mot gjeldende regler.", "ok");
+      }
+
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Oppdater valgte produkter nå";
+      }
+    });
+  }
+
+
   function renderAdmin() {
     var productChecks = PRODUCT_LIST.map(function (p, idx) {
       return "<label class='gba-check'><input type='checkbox' name='gba-product' value='" + esc(p.id) + "'" + (idx === 0 ? " checked" : "") + "> " + esc(p.name) + "</label>";
@@ -278,6 +426,12 @@
       { id: 0, name: "Søndag" }
     ].map(function (d) {
       return "<label class='gba-check'><input type='checkbox' name='gba-weekday' value='" + d.id + "'> " + d.name + "</label>";
+    }).join("");
+
+    var syncProductChecks = PRODUCT_LIST.filter(function (p) {
+      return p.id !== "1318" && p.id !== "1322";
+    }).map(function (p, idx) {
+      return "<label class='gba-check'><input type='checkbox' name='gba-sync-product' value='" + esc(p.id) + "'" + (idx === 0 ? " checked" : "") + "> " + esc(p.name) + "</label>";
     }).join("");
 
     render(
@@ -321,6 +475,18 @@
       "  </section>" +
 
       "  <section class='gba-card'>" +
+      "    <h2>Oppdater bookingprodukter nå</h2>" +
+      "    <div class='gba-msg' style='margin-bottom:12px'>Bruk denne etter at du har laget eller endret prisregler/stenginger. Den oppdaterer Quickbutik-varianter med gjeldende regler. ADMIN_TOKEN lagres kun lokalt i nettleseren din.</div>" +
+      "    <label class='gba-field'><span class='gba-label'>ADMIN_TOKEN</span><input id='gba-worker-token' class='gba-input' type='password' placeholder='Lim inn admin-token'></label>" +
+      "    <div class='gba-field' style='margin-top:10px'><span class='gba-label'>Produkter som skal oppdateres</span><div class='gba-products'>" + syncProductChecks + "</div></div>" +
+      "    <div class='gba-actions' style='margin-top:14px'>" +
+      "      <button id='gba-sync-now' class='gba-btn primary'>Oppdater valgte produkter nå</button>" +
+      "    </div>" +
+      "    <div id='gba-sync-msg' class='gba-msg' style='display:none;margin-top:12px'></div>" +
+      "    <div id='gba-sync-results' style='margin-top:12px'></div>" +
+      "  </section>" +
+
+      "  <section class='gba-card'>" +
       "    <h2>Regler</h2>" +
       "    <div id='gba-rules'><div class='gba-msg'>Laster regler…</div></div>" +
       "  </section>" +
@@ -334,6 +500,12 @@
     document.getElementById("gba-save").onclick = saveRule;
     document.getElementById("gba-rule-type").addEventListener("change", updateRuleTypeUi);
 
+    var tokenInput = document.getElementById("gba-worker-token");
+    if (tokenInput) tokenInput.value = getStoredAdminToken();
+
+    var syncBtn = document.getElementById("gba-sync-now");
+    if (syncBtn) syncBtn.onclick = runManualSync;
+
     document.querySelectorAll("input[name='gba-product']").forEach(function (cb) {
       cb.addEventListener("change", function () {
         if (cb.value === "all" && cb.checked) {
@@ -342,6 +514,19 @@
           });
         } else if (cb.value !== "all" && cb.checked) {
           var all = document.querySelector("input[name='gba-product'][value='all']");
+          if (all) all.checked = false;
+        }
+      });
+    });
+
+    document.querySelectorAll("input[name='gba-sync-product']").forEach(function (cb) {
+      cb.addEventListener("change", function () {
+        if (cb.value === "all" && cb.checked) {
+          document.querySelectorAll("input[name='gba-sync-product']").forEach(function (x) {
+            if (x.value !== "all") x.checked = false;
+          });
+        } else if (cb.value !== "all" && cb.checked) {
+          var all = document.querySelector("input[name='gba-sync-product'][value='all']");
           if (all) all.checked = false;
         }
       });
