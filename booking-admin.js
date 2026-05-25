@@ -1,5 +1,5 @@
 (function () {
-  console.log("[BOOKING ADMIN v5 MANUELL OPPDATERING] LOADED");
+  console.log("[BOOKING ADMIN v6 FREMTIDIGE BOOKINGER] LOADED");
 
   var ALLOWED_PATH = "/sider/booking-admin";
   var path = String(window.location.pathname || "");
@@ -14,6 +14,7 @@
   var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3enRybnhoZnZybGNlaWNjdGx2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTgwMjYsImV4cCI6MjA5NTI5NDAyNn0.q4QthdBWEtUi_Fdz_Ge88E_5CpJMtUvjWhMAa0R0zmE";
   var SUPABASE_JS = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
   var BOOKING_WORKER_URL = "https://gk-booking-admin.post-cd6.workers.dev";
+  var PRODUCT_API_BASE = "https://cold-shadow-36dc.post-cd6.workers.dev/products/";
 
   var PRODUCT_NAMES = {
     "1316": "Dart Bane A",
@@ -31,6 +32,14 @@
     { id: "1320", name: "Disc simulator" },
     { id: "1322", name: "Klubbkveld" },
     { id: "1349", name: "Leie hele lokalet" }
+  ];
+
+  var BOOKING_OVERVIEW_PRODUCTS = [
+    { id: "1316", name: "Dart Bane A", type: "dart", capacity: 1 },
+    { id: "1317", name: "Dart Bane B", type: "dart", capacity: 1 },
+    { id: "1320", name: "Disc simulator", type: "disc", capacity: 1 },
+    { id: "1322", name: "Klubbkveld", type: "club", capacity: 10 },
+    { id: "1349", name: "Leie hele lokalet", type: "venue", capacity: 1 }
   ];
 
   var client = null;
@@ -411,6 +420,231 @@
   }
 
 
+
+  function parseVariantDateTime(v) {
+    var date = "";
+    var time = "";
+
+    var vals = Array.isArray(v && v.values) ? v.values : [];
+
+    for (var i = 0; i < vals.length; i++) {
+      var val = String((vals[i] && (vals[i].val || vals[i].value || vals[i].name)) || "");
+
+      if (!date) {
+        var iso = val.match(/(\d{4}-\d{2}-\d{2})/);
+        if (iso) date = iso[1];
+
+        if (!date) {
+          var dm = val.match(/(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?/);
+          if (dm) {
+            var y = dm[3] || String((new Date()).getFullYear());
+            date = y + "-" + ("0" + dm[2]).slice(-2) + "-" + ("0" + dm[1]).slice(-2);
+          }
+        }
+      }
+
+      if (!time) {
+        var tm = val.match(/(\d{1,2})[:.]?(\d{2})\s*[-–]\s*(\d{1,2})[:.]?(\d{2})/);
+        if (tm) {
+          time = ("0" + tm[1]).slice(-2) + ":" + tm[2] + "-" + ("0" + tm[3]).slice(-2) + ":" + tm[4];
+        }
+      }
+    }
+
+    var sku = String(v && v.sku || "");
+    var sm = sku.match(/(\d{4}-\d{2}-\d{2})[-_]?(\d{2})(\d{2})[-_]?(\d{2})(\d{2})/);
+    if (sm) {
+      if (!date) date = sm[1];
+      if (!time) time = sm[2] + ":" + sm[3] + "-" + sm[4] + ":" + sm[5];
+    }
+
+    return { date: date, time: time };
+  }
+
+  function parseVariantPrice(v, product) {
+    var candidates = [
+      v && v.price,
+      v && v.special_price,
+      v && v.sale_price,
+      product && product.price
+    ];
+
+    for (var i = 0; i < candidates.length; i++) {
+      var raw = candidates[i];
+      if (raw === null || typeof raw === "undefined" || raw === "") continue;
+      if (typeof raw === "number") return raw;
+
+      var s = String(raw).replace(/\s/g, "").replace(",", ".");
+      var m = s.match(/-?\d+(\.\d+)?/);
+      if (!m) continue;
+
+      var n = Number(m[0]);
+      if (!isNaN(n)) return n;
+    }
+
+    return null;
+  }
+
+  function bookingStartDateTime(date, time) {
+    if (!date) return null;
+    var start = "00:00";
+    if (time) start = String(time).split("-")[0] || "00:00";
+    var d = new Date(date + "T" + start + ":00");
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function formatBookingDate(date) {
+    if (!date) return "";
+    var p = String(date).split("-");
+    if (p.length !== 3) return date;
+    return p[2] + "." + p[1] + "." + p[0];
+  }
+
+  function formatBookingPrice(price) {
+    if (price === null || typeof price === "undefined" || isNaN(Number(price))) return "";
+    return Math.round(Number(price)) + " kr";
+  }
+
+  function fetchBookingProduct(cfg) {
+    return fetch(PRODUCT_API_BASE + cfg.id, { credentials: "omit" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        return {
+          cfg: cfg,
+          product: data && data.product ? data.product : null,
+          ok: true
+        };
+      })
+      .catch(function (e) {
+        return {
+          cfg: cfg,
+          product: null,
+          ok: false,
+          error: String(e && e.message ? e.message : e)
+        };
+      });
+  }
+
+  function buildFutureBookingsFromProduct(result) {
+    var cfg = result.cfg;
+    var product = result.product;
+    var variants = product && Array.isArray(product.variants) ? product.variants : [];
+    var now = new Date();
+    var out = [];
+
+    for (var i = 0; i < variants.length; i++) {
+      var v = variants[i] || {};
+      var dt = parseVariantDateTime(v);
+      if (!dt.date) continue;
+
+      var start = bookingStartDateTime(dt.date, dt.time);
+      if (!start || start.getTime() < now.getTime()) continue;
+
+      var qty = parseInt(v.qty || "0", 10);
+      if (isNaN(qty)) qty = 0;
+
+      var capacity = Number(cfg.capacity || 1);
+      var booked = 0;
+      var statusText = "";
+
+      if (cfg.type === "club") {
+        booked = Math.max(0, capacity - qty);
+        if (booked <= 0) continue;
+        statusText = booked + "/" + capacity + " påmeldt";
+      } else {
+        if (qty > 0) continue;
+        booked = 1;
+        statusText = "Booket";
+      }
+
+      out.push({
+        productId: cfg.id,
+        productName: cfg.name,
+        type: cfg.type,
+        date: dt.date,
+        time: dt.time || (cfg.type === "club" ? "19:00-22:00" : ""),
+        startTime: start.getTime(),
+        qty: qty,
+        booked: booked,
+        capacity: capacity,
+        statusText: statusText,
+        variantId: String(v.id || ""),
+        sku: String(v.sku || ""),
+        price: parseVariantPrice(v, product)
+      });
+    }
+
+    return out;
+  }
+
+  function renderFutureBookings(list) {
+    var el = document.getElementById("gba-future-bookings");
+    if (!el) return;
+
+    if (!list || !list.length) {
+      el.innerHTML = "<div class='gba-msg'>Ingen fremtidige bookinger funnet akkurat nå.</div>";
+      return;
+    }
+
+    list.sort(function (a, b) {
+      return a.startTime - b.startTime || String(a.productName).localeCompare(String(b.productName));
+    });
+
+    var html = "<div class='gba-table-wrap'><table class='gba-table'><thead><tr>" +
+      "<th>Dato</th><th>Tid</th><th>Booking</th><th>Status</th><th>Pris</th><th>Variant/SKU</th>" +
+      "</tr></thead><tbody>";
+
+    list.forEach(function (b) {
+      var typeClass = b.type === "club" ? "price" : "closed";
+
+      html += "<tr>" +
+        "<td><strong>" + esc(formatBookingDate(b.date)) + "</strong></td>" +
+        "<td>" + esc(b.time || "") + "</td>" +
+        "<td><strong>" + esc(b.productName) + "</strong></td>" +
+        "<td><span class='gba-pill " + typeClass + "'>" + esc(b.statusText) + "</span></td>" +
+        "<td>" + esc(formatBookingPrice(b.price)) + "</td>" +
+        "<td><span class='gba-muted'>" + esc(b.sku || b.variantId) + "</span></td>" +
+      "</tr>";
+    });
+
+    html += "</tbody></table></div>";
+    el.innerHTML = html;
+  }
+
+  function loadFutureBookings() {
+    var el = document.getElementById("gba-future-bookings");
+    var msg = document.getElementById("gba-future-bookings-msg");
+    if (!el) return;
+
+    el.innerHTML = "<div class='gba-msg'>Laster fremtidige bookinger…</div>";
+    if (msg) msg.textContent = "";
+
+    Promise.all(BOOKING_OVERVIEW_PRODUCTS.map(fetchBookingProduct))
+      .then(function (results) {
+        var all = [];
+
+        results.forEach(function (result) {
+          all = all.concat(buildFutureBookingsFromProduct(result));
+        });
+
+        renderFutureBookings(all);
+
+        if (msg) {
+          var failed = results.filter(function (r) { return !r.ok; });
+          if (failed.length) {
+            msg.className = "gba-msg bad";
+            msg.style.display = "block";
+            msg.textContent = "Kunne ikke lese " + failed.length + " produkt(er). Se console for detaljer.";
+          } else {
+            msg.className = "gba-msg ok";
+            msg.style.display = "block";
+            msg.textContent = "Oppdatert: " + new Date().toLocaleString("no-NO");
+          }
+        }
+      });
+  }
+
+
   function renderAdmin() {
     var productChecks = PRODUCT_LIST.map(function (p, idx) {
       return "<label class='gba-check'><input type='checkbox' name='gba-product' value='" + esc(p.id) + "'" + (idx === 0 ? " checked" : "") + "> " + esc(p.name) + "</label>";
@@ -475,6 +709,16 @@
       "  </section>" +
 
       "  <section class='gba-card'>" +
+      "    <div class='gba-topbar'>" +
+      "      <h2>Fremtidige bookinger</h2>" +
+      "      <button id='gba-refresh-bookings' class='gba-btn'>Oppdater bookinger</button>" +
+      "    </div>" +
+      "    <div class='gba-msg' style='margin:0 0 12px'>Viser kommende bookinger på dart, disc, klubbkveld og hele lokalet. Førstkommende ligger øverst. Foreløpig vises ikke kundenavn, kun bookede varianter/påmeldingsstatus.</div>" +
+      "    <div id='gba-future-bookings'></div>" +
+      "    <div id='gba-future-bookings-msg' class='gba-msg' style='display:none;margin-top:12px'></div>" +
+      "  </section>" +
+
+      "  <section class='gba-card'>" +
       "    <h2>Oppdater bookingprodukter nå</h2>" +
       "    <div class='gba-msg' style='margin-bottom:12px'>Bruk denne etter at du har laget eller endret prisregler/stenginger. Den oppdaterer Quickbutik-varianter med gjeldende regler. ADMIN_TOKEN lagres kun lokalt i nettleseren din.</div>" +
       "    <label class='gba-field'><span class='gba-label'>ADMIN_TOKEN</span><input id='gba-worker-token' class='gba-input' type='password' placeholder='Lim inn admin-token'></label>" +
@@ -506,6 +750,9 @@
     var syncBtn = document.getElementById("gba-sync-now");
     if (syncBtn) syncBtn.onclick = runManualSync;
 
+    var refreshBookingsBtn = document.getElementById("gba-refresh-bookings");
+    if (refreshBookingsBtn) refreshBookingsBtn.onclick = loadFutureBookings;
+
     document.querySelectorAll("input[name='gba-product']").forEach(function (cb) {
       cb.addEventListener("change", function () {
         if (cb.value === "all" && cb.checked) {
@@ -533,6 +780,7 @@
     });
 
     updateRuleTypeUi();
+    loadFutureBookings();
     loadRules();
   }
 
