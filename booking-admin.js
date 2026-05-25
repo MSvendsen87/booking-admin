@@ -1,5 +1,5 @@
 (function () {
-  console.log("[BOOKING ADMIN v3.1 SUPABASE LEGACY ANON KEY] LOADED");
+  console.log("[BOOKING ADMIN v3.2 EMAIL PASSWORD LOGIN] LOADED");
 
   var ALLOWED_PATH = "/sider/booking-admin";
   var path = String(window.location.pathname || "");
@@ -129,39 +129,56 @@
       "  <section class='gba-hero'>" +
       "    <div class='gba-kicker'>GolfKongen booking-admin</div>" +
       "    <div class='gba-title'>Logg inn som admin</div>" +
-      "    <div class='gba-sub'>Bare godkjente admin-eposter får tilgang. Du får en innloggingslenke på e-post.</div>" +
+      "    <div class='gba-sub'>Bare godkjente admin-eposter får tilgang. Logg inn med e-post og passord.</div>" +
       "  </section>" +
       "  <section class='gba-card'>" +
       "    <div class='gba-row cols2'>" +
-      "      <label class='gba-field'><span class='gba-label'>E-post</span><input id='gba-email' class='gba-input' type='email' placeholder='din@epost.no'></label>" +
-      "      <div class='gba-field'><span class='gba-label'>&nbsp;</span><button id='gba-login-btn' class='gba-btn primary'>Send innloggingslenke</button></div>" +
+      "      <label class='gba-field'><span class='gba-label'>E-post</span><input id='gba-email' class='gba-input' type='email' autocomplete='username' placeholder='din@epost.no'></label>" +
+      "      <label class='gba-field'><span class='gba-label'>Passord</span><input id='gba-password' class='gba-input' type='password' autocomplete='current-password' placeholder='Passord'></label>" +
+      "    </div>" +
+      "    <div class='gba-actions' style='margin-top:12px'>" +
+      "      <button id='gba-login-btn' class='gba-btn primary'>Logg inn</button>" +
       "    </div>" +
       "    <div id='gba-login-msg' class='gba-msg' style='display:none;margin-top:12px'></div>" +
       "  </section>" +
       "</div>"
     );
 
-    document.getElementById("gba-login-btn").onclick = function () {
+    function doLogin() {
       var email = String(document.getElementById("gba-email").value || "").trim().toLowerCase();
+      var password = String(document.getElementById("gba-password").value || "");
+
       if (!email) {
         setMsg("gba-login-msg", "Skriv inn e-post først.", "bad");
         return;
       }
 
-      setMsg("gba-login-msg", "Sender innloggingslenke…", "");
-      client.auth.signInWithOtp({
+      if (!password) {
+        setMsg("gba-login-msg", "Skriv inn passord.", "bad");
+        return;
+      }
+
+      setMsg("gba-login-msg", "Logger inn…", "");
+
+      client.auth.signInWithPassword({
         email: email,
-        options: {
-          emailRedirectTo: window.location.origin + ALLOWED_PATH
-        }
+        password: password
       }).then(function (res) {
         if (res.error) {
-          setMsg("gba-login-msg", res.error.message || "Kunne ikke sende lenke.", "bad");
-        } else {
-          setMsg("gba-login-msg", "Sjekk e-posten din og åpne innloggingslenken.", "ok");
+          setMsg("gba-login-msg", res.error.message || "Kunne ikke logge inn.", "bad");
+          return;
         }
+
+        setMsg("gba-login-msg", "Innlogging OK. Sjekker tilgang…", "ok");
+        init();
       });
-    };
+    }
+
+    document.getElementById("gba-login-btn").onclick = doLogin;
+
+    document.getElementById("gba-password").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") doLogin();
+    });
   }
 
   function renderDenied(email) {
