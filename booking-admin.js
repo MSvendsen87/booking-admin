@@ -1,5 +1,5 @@
 (function () {
-  console.log("[BOOKING ADMIN v3.2 EMAIL PASSWORD LOGIN] LOADED");
+  console.log("[BOOKING ADMIN v4 PRICE RULES SMART] LOADED");
 
   var ALLOWED_PATH = "/sider/booking-admin";
   var path = String(window.location.pathname || "");
@@ -72,8 +72,8 @@
       ".gba-msg{border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.045);border-radius:14px;padding:11px 12px;color:rgba(244,247,251,.78);font-size:13px;line-height:1.4}" +
       ".gba-msg.ok{border-color:rgba(43,209,139,.35);background:rgba(43,209,139,.10);color:#c8ffe4}" +
       ".gba-msg.bad{border-color:rgba(255,95,95,.35);background:rgba(255,95,95,.10);color:#ffd0d0}" +
-      ".gba-products{display:grid;grid-template-columns:1fr;gap:8px}" +
-      "@media(min-width:700px){.gba-products{grid-template-columns:repeat(3,1fr)}}" +
+      ".gba-products{display:grid;grid-template-columns:1fr;gap:8px}.gba-weekdays{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.gba-hidden{display:none!important}" +
+      "@media(min-width:700px){.gba-products{grid-template-columns:repeat(3,1fr)}.gba-weekdays{grid-template-columns:repeat(7,minmax(0,1fr))}}" +
       ".gba-check{display:flex;gap:8px;align-items:center;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);border-radius:12px;padding:10px;font-size:13px;font-weight:800}" +
       ".gba-table-wrap{overflow:auto;border:1px solid rgba(255,255,255,.10);border-radius:15px}" +
       ".gba-table{width:100%;border-collapse:collapse;min-width:860px}" +
@@ -205,6 +205,22 @@
     });
   }
 
+
+  function weekdayLabels(days) {
+    if (!Array.isArray(days) || !days.length) return "Alle dager";
+    var names = ["Søn", "Man", "Tir", "Ons", "Tor", "Fre", "Lør"];
+    return days.map(function (d) { return names[Number(d)] || String(d); }).join(", ");
+  }
+
+  function getSelectedWeekdays() {
+    var vals = [];
+    document.querySelectorAll("input[name='gba-weekday']:checked").forEach(function (cb) {
+      vals.push(Number(cb.value));
+    });
+    return vals;
+  }
+
+
   function renderRulesTable() {
     var el = document.getElementById("gba-rules");
     if (!el) return;
@@ -215,7 +231,7 @@
     }
 
     var html = "<div class='gba-table-wrap'><table class='gba-table'><thead><tr>" +
-      "<th>Type</th><th>Navn</th><th>Dato</th><th>Tid</th><th>Produkter</th><th>Pris</th><th>Status</th><th></th>" +
+      "<th>Type</th><th>Navn</th><th>Dato</th><th>Dager</th><th>Tid</th><th>Produkter</th><th>Pris</th><th>Status</th><th></th>" +
       "</tr></thead><tbody>";
 
     rules.forEach(function (r) {
@@ -226,7 +242,8 @@
         "<td><span class='gba-pill " + typeClass + "'>" + typeText + "</span></td>" +
         "<td><strong>" + esc(r.title) + "</strong><br><span class='gba-muted'>" + esc(r.description || "") + "</span></td>" +
         "<td>" + esc(r.date_from) + (r.date_to !== r.date_from ? " → " + esc(r.date_to) : "") + "</td>" +
-        "<td>" + esc((r.time_from || "Hele dagen").slice(0,5)) + (r.time_to ? "–" + esc(String(r.time_to).slice(0,5)) : "") + "</td>" +
+        "<td>" + esc(weekdayLabels(r.weekdays)) + "</td>" +
+        "<td>" + esc((r.time_from || "Hele åpningstiden").slice(0,5)) + (r.time_to ? "–" + esc(String(r.time_to).slice(0,5)) : "") + "</td>" +
         "<td>" + p + "</td>" +
         "<td>" + (r.rule_type === "price" ? esc(r.price || "") + " kr" : "—") + "</td>" +
         "<td>" + (r.active ? "Aktiv" : "Av") + "</td>" +
@@ -251,6 +268,18 @@
       return "<label class='gba-check'><input type='checkbox' name='gba-product' value='" + esc(p.id) + "'" + (idx === 0 ? " checked" : "") + "> " + esc(p.name) + "</label>";
     }).join("");
 
+    var weekdayChecks = [
+      { id: 1, name: "Mandag" },
+      { id: 2, name: "Tirsdag" },
+      { id: 3, name: "Onsdag" },
+      { id: 4, name: "Torsdag" },
+      { id: 5, name: "Fredag" },
+      { id: 6, name: "Lørdag" },
+      { id: 0, name: "Søndag" }
+    ].map(function (d) {
+      return "<label class='gba-check'><input type='checkbox' name='gba-weekday' value='" + d.id + "'> " + d.name + "</label>";
+    }).join("");
+
     render(
       "<div class='gba-wrap'>" +
       "  <section class='gba-hero'>" +
@@ -258,7 +287,7 @@
       "      <div>" +
       "        <div class='gba-kicker'>GolfKongen intern bookingverktøy</div>" +
       "        <div class='gba-title'>Booking-admin</div>" +
-      "        <div class='gba-sub'>Innlogget som <strong>" + esc(currentUser.email) + "</strong>. Her kan du stenge dager/tider og legge inn prisregler.</div>" +
+      "        <div class='gba-sub'>Innlogget som <strong>" + esc(currentUser.email) + "</strong>. Her kan du stenge dager/tider og lage smarte prisregler.</div>" +
       "      </div>" +
       "      <button id='gba-logout' class='gba-btn'>Logg ut</button>" +
       "    </div>" +
@@ -266,20 +295,23 @@
 
       "  <section class='gba-card'>" +
       "    <h2>Ny regel</h2>" +
+      "    <div class='gba-msg' style='margin-bottom:12px'>Tips: For prisreduksjon på flere lørdager velger du <strong>Prisjustering</strong>, datoperiode, huker av <strong>Lørdag</strong>, lar klokkeslett stå tomt for hele åpningstiden, velger produkter og setter ny pris.</div>" +
       "    <div class='gba-row cols3'>" +
       "      <label class='gba-field'><span class='gba-label'>Type</span><select id='gba-rule-type' class='gba-select'><option value='closed'>Stenging</option><option value='price'>Prisjustering</option></select></label>" +
-      "      <label class='gba-field'><span class='gba-label'>Navn</span><input id='gba-title' class='gba-input' placeholder='Ferie, helligdag, privat arrangement, trening'></label>" +
-      "      <label class='gba-field'><span class='gba-label'>Pris ved prisregel</span><input id='gba-price' class='gba-input' type='number' min='0' step='1' placeholder='f.eks. 100'></label>" +
+      "      <label id='gba-title-field' class='gba-field'><span id='gba-title-label' class='gba-label'>Navn</span><input id='gba-title' class='gba-input' placeholder='Ferie, helligdag, privat arrangement, trening'></label>" +
+      "      <label id='gba-price-field' class='gba-field'><span class='gba-label'>Ny pris</span><input id='gba-price' class='gba-input' type='number' min='0' step='1' placeholder='f.eks. 100'></label>" +
       "    </div>" +
       "    <div class='gba-row cols3' style='margin-top:10px'>" +
       "      <label class='gba-field'><span class='gba-label'>Fra dato</span><input id='gba-date-from' class='gba-input' type='date'></label>" +
       "      <label class='gba-field'><span class='gba-label'>Til dato</span><input id='gba-date-to' class='gba-input' type='date'></label>" +
-      "      <label class='gba-field'><span class='gba-label'>Beskrivelse</span><input id='gba-description' class='gba-input' placeholder='Valgfritt'></label>" +
+      "      <label class='gba-field'><span class='gba-label'>Beskrivelse</span><input id='gba-description' class='gba-input' placeholder='Valgfritt. Vises ikke på prisregler'></label>" +
       "    </div>" +
+      "    <div class='gba-field' style='margin-top:10px'><span class='gba-label'>Ukedager</span><div class='gba-weekdays'>" + weekdayChecks + "</div><div class='gba-muted' style='margin-top:6px'>Ingen valg = alle dager i datoperioden.</div></div>" +
       "    <div class='gba-row cols2' style='margin-top:10px'>" +
       "      <label class='gba-field'><span class='gba-label'>Fra klokke</span><input id='gba-time-from' class='gba-input' type='time'></label>" +
       "      <label class='gba-field'><span class='gba-label'>Til klokke</span><input id='gba-time-to' class='gba-input' type='time'></label>" +
       "    </div>" +
+      "    <div class='gba-muted' style='margin-top:6px'>Tomt klokkeslett = hele åpningstiden.</div>" +
       "    <div class='gba-field' style='margin-top:10px'><span class='gba-label'>Gjelder produkter</span><div class='gba-products'>" + productChecks + "</div></div>" +
       "    <div class='gba-actions' style='margin-top:14px'>" +
       "      <button id='gba-save' class='gba-btn primary'>Lagre regel</button>" +
@@ -300,6 +332,7 @@
     };
     document.getElementById("gba-refresh").onclick = loadRules;
     document.getElementById("gba-save").onclick = saveRule;
+    document.getElementById("gba-rule-type").addEventListener("change", updateRuleTypeUi);
 
     document.querySelectorAll("input[name='gba-product']").forEach(function (cb) {
       cb.addEventListener("change", function () {
@@ -314,7 +347,28 @@
       });
     });
 
+    updateRuleTypeUi();
     loadRules();
+  }
+
+  function updateRuleTypeUi() {
+    var type = document.getElementById("gba-rule-type") ? document.getElementById("gba-rule-type").value : "closed";
+    var titleInput = document.getElementById("gba-title");
+    var titleLabel = document.getElementById("gba-title-label");
+    var priceField = document.getElementById("gba-price-field");
+    var desc = document.getElementById("gba-description");
+
+    if (type === "price") {
+      if (titleLabel) titleLabel.textContent = "Navn internt";
+      if (titleInput) titleInput.placeholder = "Valgfritt. Eks: Lørdagspris";
+      if (priceField) priceField.classList.remove("gba-hidden");
+      if (desc) desc.placeholder = "Valgfritt internt notat. Vises ikke til kunde.";
+    } else {
+      if (titleLabel) titleLabel.textContent = "Navn";
+      if (titleInput) titleInput.placeholder = "Ferie, helligdag, privat arrangement, trening";
+      if (priceField) priceField.classList.add("gba-hidden");
+      if (desc) desc.placeholder = "Valgfritt";
+    }
   }
 
   function getSelectedProducts() {
@@ -336,7 +390,8 @@
     var priceRaw = document.getElementById("gba-price").value;
     var price = type === "price" && priceRaw !== "" ? Number(priceRaw) : null;
 
-    if (!title) return setMsg("gba-save-msg", "Skriv inn navn på regelen.", "bad");
+    if (type === "closed" && !title) return setMsg("gba-save-msg", "Skriv inn navn på stengingen.", "bad");
+    if (type === "price" && !title) title = "Prisregel";
     if (!dateFrom) return setMsg("gba-save-msg", "Velg fra dato.", "bad");
     if (!dateTo) dateTo = dateFrom;
     if (timeFrom && !timeTo) return setMsg("gba-save-msg", "Velg til klokke også.", "bad");
@@ -348,6 +403,7 @@
       title: title,
       description: description || null,
       product_ids: getSelectedProducts(),
+      weekdays: getSelectedWeekdays(),
       date_from: dateFrom,
       date_to: dateTo,
       time_from: timeFrom,
