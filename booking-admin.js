@@ -1,9 +1,10 @@
 (function () {
-  console.log("[BOOKING ADMIN v1 READONLY] LOADED");
+  console.log("[BOOKING ADMIN v2 CLOSED TIMES READONLY] LOADED");
 
   var PAGE_PATH = "/sider/booking-admin";
   var ROOT_ID = "gk-booking-admin";
   var API_BASE = "https://cold-shadow-36dc.post-cd6.workers.dev/products/";
+  var ADMIN_API_BASE = "https://gk-booking-admin.post-cd6.workers.dev";
 
   var PRODUCTS = [
     { id: "1316", name: "Dart Bane A", icon: "🎯" },
@@ -91,6 +92,11 @@
       <h2>Bookede tider</h2>
       <div id="gka-bookings"></div>
     </section>
+    <section class="gka-section">
+      <h2>Stengte tider og spesialpriser</h2>
+      <div id="gka-closed-times" class="gka-loading">Laster stengte tider…</div>
+      <div class="gka-note">Foreløpig er dette lesevisning fra gk-booking-admin-koden. Neste steg er å gjøre denne delen redigerbar.</div>
+    </section>
     <div class="gka-note">Merk: Denne oversikten leser produktvarianter og viser tider der lager er 0. Den viser foreløpig ikke kundenavn. Kundedata kan vi legge til senere via ordre-API i en sikret Cloudflare Worker.</div>
   `;
 
@@ -98,8 +104,10 @@
   var summaryEl = document.getElementById("gka-summary");
   var bookingsEl = document.getElementById("gka-bookings");
   var refreshBtn = document.getElementById("gka-refresh");
+  var closedTimesEl = document.getElementById("gka-closed-times");
   var activeRange = "today";
   var allBookings = [];
+  var closedConfig = null;
 
   function pad2(n){ return String(n).padStart(2,"0"); }
   function todayLocal(){ var n=new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); }
@@ -214,11 +222,77 @@
     renderBookings();
   }
 
+
+  function productNameFromRule(rule) {
+    var p = rule.products || rule.product || "all";
+    if (p === "all") return "Alle aktiviteter";
+    var arr = Array.isArray(p) ? p : [String(p)];
+    return arr.map(function (id) {
+      var found = PRODUCTS.find(function (x) { return x.id === String(id); });
+      return found ? found.name : String(id);
+    }).join(", ");
+  }
+
+  function renderClosedTimes() {
+    if (!closedTimesEl) return;
+
+    var data = closedConfig || {};
+    var closedDates = Array.isArray(data.closedDates) ? data.closedDates : [];
+    var closedTimes = Array.isArray(data.closedTimes) ? data.closedTimes : [];
+    var specialPrices = Array.isArray(data.specialPrices) ? data.specialPrices : [];
+
+    if (!closedDates.length && !closedTimes.length && !specialPrices.length) {
+      closedTimesEl.className = "";
+      closedTimesEl.innerHTML = "<div class='gka-empty'>Ingen manuelle stenginger eller spesialpriser er lagt inn.</div>";
+      return;
+    }
+
+    var html = "<div class='gka-table-wrap'><table class='gka-table'><thead><tr><th>Type</th><th>Dato</th><th>Tid</th><th>Gjelder</th><th>Årsak/pris</th></tr></thead><tbody>";
+
+    closedDates.forEach(function (r) {
+      html += "<tr><td><strong>Hel dag</strong></td><td>" + (r.date || "") + "</td><td>Hele dagen</td><td>" + productNameFromRule(r) + "</td><td>" + (r.reason || "Stengt") + "</td></tr>";
+    });
+
+    closedTimes.forEach(function (r) {
+      html += "<tr><td><strong>Tidsrom</strong></td><td>" + (r.date || "") + "</td><td>" + (r.from || "") + "–" + (r.to || "") + "</td><td>" + productNameFromRule(r) + "</td><td>" + (r.reason || "Stengt") + "</td></tr>";
+    });
+
+    specialPrices.forEach(function (r) {
+      html += "<tr><td><strong>Spesialpris</strong></td><td>" + (r.date || "") + "</td><td>" + (r.from || "") + "–" + (r.to || "") + "</td><td>" + productNameFromRule(r) + "</td><td>" + (r.price || "") + " kr · " + (r.reason || "") + "</td></tr>";
+    });
+
+    html += "</tbody></table></div>";
+    closedTimesEl.className = "";
+    closedTimesEl.innerHTML = html;
+  }
+
+  function loadClosedTimes() {
+    if (!closedTimesEl) return Promise.resolve();
+
+    closedTimesEl.className = "gka-loading";
+    closedTimesEl.textContent = "Laster stengte tider…";
+
+    return fetch(ADMIN_API_BASE + "/booking/closed-times", { credentials: "omit" })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        closedConfig = data || {};
+        renderClosedTimes();
+        console.log("[BOOKING ADMIN] Stengte tider klar", closedConfig);
+      })
+      .catch(function (e) {
+        console.warn("[BOOKING ADMIN] Kunne ikke hente stengte tider", e);
+        closedTimesEl.className = "gka-error";
+        closedTimesEl.textContent = "Kunne ikke laste stengte tider.";
+      });
+  }
+
+
   function load(){
     statusEl.className="gka-loading";
     statusEl.textContent="Laster bookingdata…";
     summaryEl.innerHTML="";
     bookingsEl.innerHTML="";
+    loadClosedTimes();
     Promise.all(PRODUCTS.map(fetchProduct)).then(function(results){
       allBookings=buildBookings(results);
       statusEl.className="";
