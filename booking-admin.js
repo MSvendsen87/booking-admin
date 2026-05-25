@@ -1,5 +1,5 @@
 (function () {
-  console.log("[BOOKING ADMIN v6 FREMTIDIGE BOOKINGER] LOADED");
+  console.log("[BOOKING ADMIN v6.1 BOOKINGER ØVERST] LOADED");
 
   var ALLOWED_PATH = "/sider/booking-admin";
   var path = String(window.location.pathname || "");
@@ -682,6 +682,16 @@
       "  </section>" +
 
       "  <section class='gba-card'>" +
+      "    <div class='gba-topbar'>" +
+      "      <h2>Fremtidige bookinger</h2>" +
+      "      <button id='gba-refresh-bookings' class='gba-btn'>Oppdater bookinger</button>" +
+      "    </div>" +
+      "    <div class='gba-msg' style='margin:0 0 12px'>Viser kommende bookinger på dart, disc, klubbkveld og hele lokalet. Førstkommende ligger øverst. Foreløpig vises ikke kundenavn, kun bookede varianter/påmeldingsstatus.</div>" +
+      "    <div id='gba-future-bookings'></div>" +
+      "    <div id='gba-future-bookings-msg' class='gba-msg' style='display:none;margin-top:12px'></div>" +
+      "  </section>" +
+
+      "  <section class='gba-card'>" +
       "    <h2>Ny regel</h2>" +
       "    <div class='gba-msg' style='margin-bottom:12px'>Tips: For prisreduksjon på flere lørdager velger du <strong>Prisjustering</strong>, datoperiode, huker av <strong>Lørdag</strong>, lar klokkeslett stå tomt for hele åpningstiden, velger produkter og setter ny pris.</div>" +
       "    <div class='gba-row cols3'>" +
@@ -706,16 +716,6 @@
       "      <button id='gba-refresh' class='gba-btn'>Oppdater liste</button>" +
       "    </div>" +
       "    <div id='gba-save-msg' class='gba-msg' style='display:none;margin-top:12px'></div>" +
-      "  </section>" +
-
-      "  <section class='gba-card'>" +
-      "    <div class='gba-topbar'>" +
-      "      <h2>Fremtidige bookinger</h2>" +
-      "      <button id='gba-refresh-bookings' class='gba-btn'>Oppdater bookinger</button>" +
-      "    </div>" +
-      "    <div class='gba-msg' style='margin:0 0 12px'>Viser kommende bookinger på dart, disc, klubbkveld og hele lokalet. Førstkommende ligger øverst. Foreløpig vises ikke kundenavn, kun bookede varianter/påmeldingsstatus.</div>" +
-      "    <div id='gba-future-bookings'></div>" +
-      "    <div id='gba-future-bookings-msg' class='gba-msg' style='display:none;margin-top:12px'></div>" +
       "  </section>" +
 
       "  <section class='gba-card'>" +
