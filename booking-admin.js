@@ -1,314 +1,428 @@
 (function () {
-  console.log("[BOOKING ADMIN v2 CLOSED TIMES READONLY] LOADED");
+  console.log("[BOOKING ADMIN v3.1 SUPABASE LEGACY ANON KEY] LOADED");
 
-  var PAGE_PATH = "/sider/booking-admin";
+  var ALLOWED_PATH = "/sider/booking-admin";
+  var path = String(window.location.pathname || "");
+  while (path.length > 1 && path.charAt(path.length - 1) === "/") path = path.slice(0, -1);
+  if (path !== ALLOWED_PATH) return;
+
   var ROOT_ID = "gk-booking-admin";
-  var API_BASE = "https://cold-shadow-36dc.post-cd6.workers.dev/products/";
-  var ADMIN_API_BASE = "https://gk-booking-admin.post-cd6.workers.dev";
+  var root = document.getElementById(ROOT_ID);
+  if (!root) return;
 
-  var PRODUCTS = [
-    { id: "1316", name: "Dart Bane A", icon: "🎯" },
-    { id: "1317", name: "Dart Bane B", icon: "🎯" },
-    { id: "1320", name: "Disc simulator", icon: "🥏" },
-    { id: "1349", name: "Leie hele lokalet", icon: "🎉" },
-    { id: "1322", name: "Klubbkveld", icon: "👥" }
+  var SUPABASE_URL = "https://fwztrnxhfvrlceicctlv.supabase.co";
+  var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3enRybnhoZnZybGNlaWNjdGx2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk3MTgwMjYsImV4cCI6MjA5NTI5NDAyNn0.q4QthdBWEtUi_Fdz_Ge88E_5CpJMtUvjWhMAa0R0zmE";
+  var SUPABASE_JS = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+
+  var PRODUCT_NAMES = {
+    "1316": "Dart Bane A",
+    "1317": "Dart Bane B",
+    "1318": "Leie pilsett",
+    "1320": "Disc simulator",
+    "1322": "Klubbkveld",
+    "1349": "Leie hele lokalet"
+  };
+
+  var PRODUCT_LIST = [
+    { id: "all", name: "Alle bookingprodukter" },
+    { id: "1316", name: "Dart Bane A" },
+    { id: "1317", name: "Dart Bane B" },
+    { id: "1320", name: "Disc simulator" },
+    { id: "1322", name: "Klubbkveld" },
+    { id: "1349", name: "Leie hele lokalet" }
   ];
 
-  var path = String(location.pathname || "");
-  while (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
-  if (path !== PAGE_PATH) return;
+  var client = null;
+  var currentUser = null;
+  var currentAdmin = null;
+  var rules = [];
 
-  var root = document.getElementById(ROOT_ID);
-  if (!root) {
-    console.warn("[BOOKING ADMIN] Fant ikke #" + ROOT_ID);
-    return;
+  function esc(v) {
+    return String(v == null ? "" : v)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
-  function injectCss() {
-    if (document.getElementById("gk-booking-admin-css-v1")) return;
-    var style = document.createElement("style");
-    style.id = "gk-booking-admin-css-v1";
-    style.textContent = `
-      #gk-booking-admin{max-width:1180px;margin:0 auto 40px;color:#e9eef5;font-family:inherit}
-      #gk-booking-admin *{box-sizing:border-box}
-      .gka-hero{border:1px solid rgba(255,255,255,.10);background:linear-gradient(180deg,rgba(35,35,39,.96),rgba(22,22,25,.96));border-radius:22px;padding:18px;margin:0 0 14px;box-shadow:0 14px 34px rgba(0,0,0,.25)}
-      .gka-kicker{font-size:13px;font-weight:900;color:#ffe29b;margin-bottom:5px}
-      .gka-h1{margin:0 0 8px;color:#fff;font-size:clamp(26px,4vw,42px);font-weight:1000;line-height:1.08}
-      .gka-lead{margin:0;color:rgba(233,238,245,.82);line-height:1.5;max-width:850px}
-      .gka-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0;align-items:center;justify-content:space-between}
-      .gka-tabs{display:flex;flex-wrap:wrap;gap:8px}
-      .gka-btn{min-height:42px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.07);color:#fff;font-weight:900;padding:0 14px;cursor:pointer}
-      .gka-btn:hover{background:rgba(255,255,255,.12)}
-      .gka-btn.active{border-color:rgba(49,210,135,.65);background:linear-gradient(180deg,rgba(31,95,65,.95),rgba(24,72,51,.95))}
-      .gka-small{font-size:13px;color:rgba(233,238,245,.68)}
-      .gka-grid{display:grid;grid-template-columns:1fr;gap:12px}
-      @media(min-width:850px){.gka-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-      .gka-card{border:1px solid rgba(255,255,255,.10);background:linear-gradient(180deg,rgba(36,36,39,.96),rgba(25,25,28,.96));border-radius:18px;padding:14px;box-shadow:0 10px 24px rgba(0,0,0,.18)}
-      .gka-card-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
-      .gka-card-title h3{margin:0;color:#fff;font-size:17px;font-weight:1000}
-      .gka-badge{border-radius:999px;padding:6px 10px;font-size:12px;font-weight:1000;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#fff}
-      .gka-badge.ok{border-color:rgba(49,210,135,.35);color:#aef5cc;background:rgba(49,210,135,.10)}
-      .gka-badge.warn{border-color:rgba(255,188,88,.40);color:#ffd79a;background:rgba(255,188,88,.10)}
-      .gka-section{border:1px solid rgba(255,255,255,.10);background:linear-gradient(180deg,rgba(24,24,27,.96),rgba(17,17,19,.96));border-radius:20px;padding:14px;margin-top:14px}
-      .gka-section h2{margin:0 0 10px;color:#fff;font-size:21px;font-weight:1000}
-      .gka-table-wrap{overflow-x:auto}
-      .gka-table{width:100%;border-collapse:separate;border-spacing:0 8px;min-width:720px}
-      .gka-table th{text-align:left;color:rgba(233,238,245,.65);font-size:12px;font-weight:1000;padding:0 10px;text-transform:uppercase;letter-spacing:.04em}
-      .gka-table td{background:rgba(255,255,255,.045);border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08);padding:10px;color:rgba(233,238,245,.90);font-size:14px}
-      .gka-table td:first-child{border-left:1px solid rgba(255,255,255,.08);border-radius:13px 0 0 13px}
-      .gka-table td:last-child{border-right:1px solid rgba(255,255,255,.08);border-radius:0 13px 13px 0}
-      .gka-empty{border:1px dashed rgba(255,255,255,.16);border-radius:16px;padding:18px;color:rgba(233,238,245,.72)}
-      .gka-loading{border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);border-radius:16px;padding:14px;color:rgba(233,238,245,.76)}
-      .gka-error{border:1px solid rgba(255,100,100,.35);background:rgba(255,100,100,.10);color:#ffb3b3;border-radius:16px;padding:14px}
-      .gka-note{margin-top:12px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.045);border-radius:16px;padding:12px 14px;color:rgba(233,238,245,.78);font-size:13px;line-height:1.45}
-      @media(max-width:640px){.gka-toolbar{align-items:stretch;flex-direction:column}.gka-tabs{display:grid;grid-template-columns:1fr 1fr}.gka-btn{width:100%}}
-    `;
-    document.head.appendChild(style);
+  function cssOnce() {
+    if (document.getElementById("gk-booking-admin-v3-css")) return;
+
+    var css =
+      "#gk-booking-admin{max-width:1180px;margin:0 auto;padding:16px;color:#f4f7fb;font-family:inherit}" +
+      ".gba-wrap{display:grid;gap:16px}" +
+      ".gba-hero{border:1px solid rgba(255,255,255,.10);background:linear-gradient(180deg,#171717,#101010);border-radius:22px;padding:18px;box-shadow:0 18px 50px rgba(0,0,0,.35)}" +
+      ".gba-kicker{font-size:12px;color:#f0c14b;font-weight:900;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}" +
+      ".gba-title{font-size:30px;line-height:1.05;font-weight:1000;margin:0 0 8px}" +
+      ".gba-sub{color:rgba(244,247,251,.72);font-size:14px;line-height:1.45}" +
+      ".gba-card{border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.045);border-radius:18px;padding:14px}" +
+      ".gba-card h2{font-size:18px;margin:0 0 10px;font-weight:1000}" +
+      ".gba-row{display:grid;gap:10px}" +
+      "@media(min-width:760px){.gba-row.cols2{grid-template-columns:1fr 1fr}.gba-row.cols3{grid-template-columns:1fr 1fr 1fr}}" +
+      ".gba-field{display:grid;gap:6px}" +
+      ".gba-label{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:rgba(244,247,251,.65);font-weight:1000}" +
+      ".gba-input,.gba-select,.gba-textarea{width:100%;box-sizing:border-box;border:1px solid rgba(255,255,255,.14);background:#0f0f0f;color:#fff;border-radius:13px;padding:11px 12px;font-size:14px}" +
+      ".gba-textarea{min-height:74px;resize:vertical}" +
+      ".gba-btn{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:10px 14px;border-radius:13px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;font-weight:1000;cursor:pointer;text-decoration:none}" +
+      ".gba-btn.primary{border-color:rgba(43,209,139,.45);background:linear-gradient(135deg,rgba(43,209,139,.22),rgba(125,255,184,.08))}" +
+      ".gba-btn.danger{border-color:rgba(255,95,95,.45);background:rgba(255,95,95,.10)}" +
+      ".gba-btn:disabled{opacity:.55;cursor:not-allowed}" +
+      ".gba-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}" +
+      ".gba-msg{border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.045);border-radius:14px;padding:11px 12px;color:rgba(244,247,251,.78);font-size:13px;line-height:1.4}" +
+      ".gba-msg.ok{border-color:rgba(43,209,139,.35);background:rgba(43,209,139,.10);color:#c8ffe4}" +
+      ".gba-msg.bad{border-color:rgba(255,95,95,.35);background:rgba(255,95,95,.10);color:#ffd0d0}" +
+      ".gba-products{display:grid;grid-template-columns:1fr;gap:8px}" +
+      "@media(min-width:700px){.gba-products{grid-template-columns:repeat(3,1fr)}}" +
+      ".gba-check{display:flex;gap:8px;align-items:center;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);border-radius:12px;padding:10px;font-size:13px;font-weight:800}" +
+      ".gba-table-wrap{overflow:auto;border:1px solid rgba(255,255,255,.10);border-radius:15px}" +
+      ".gba-table{width:100%;border-collapse:collapse;min-width:860px}" +
+      ".gba-table th,.gba-table td{border-bottom:1px solid rgba(255,255,255,.08);padding:10px 11px;text-align:left;font-size:13px;vertical-align:top}" +
+      ".gba-table th{color:rgba(244,247,251,.62);font-size:11px;text-transform:uppercase;letter-spacing:.04em;background:rgba(255,255,255,.04)}" +
+      ".gba-pill{display:inline-flex;padding:5px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);font-size:12px;font-weight:900;margin:1px}" +
+      ".gba-pill.closed{border-color:rgba(255,95,95,.35);background:rgba(255,95,95,.10);color:#ffd0d0}" +
+      ".gba-pill.price{border-color:rgba(240,193,75,.35);background:rgba(240,193,75,.10);color:#ffe4a3}" +
+      ".gba-topbar{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}" +
+      ".gba-muted{color:rgba(244,247,251,.62);font-size:13px}";
+
+    var st = document.createElement("style");
+    st.id = "gk-booking-admin-v3-css";
+    st.appendChild(document.createTextNode(css));
+    document.head.appendChild(st);
   }
 
-  injectCss();
+  function render(html) {
+    root.innerHTML = html;
+  }
 
-  root.innerHTML = `
-    <section class="gka-hero">
-      <div class="gka-kicker">GolfKongen intern bookingoversikt</div>
-      <h1 class="gka-h1">Booking-admin</h1>
-      <p class="gka-lead">Første versjon er kun lesevisning. Her får du oversikt over bookede tider for dart, disc, klubbkveld og leie av hele lokalet. Redigering av priser og blokkering kommer i neste steg.</p>
-    </section>
-    <div class="gka-toolbar">
-      <div class="gka-tabs">
-        <button class="gka-btn active" data-range="today">I dag</button>
-        <button class="gka-btn" data-range="tomorrow">I morgen</button>
-        <button class="gka-btn" data-range="7">Neste 7 dager</button>
-        <button class="gka-btn" data-range="40">Neste 40 dager</button>
-      </div>
-      <button id="gka-refresh" class="gka-btn">Oppdater</button>
-    </div>
-    <div id="gka-status" class="gka-loading">Laster bookingdata…</div>
-    <section class="gka-section">
-      <h2>Oppsummering</h2>
-      <div id="gka-summary" class="gka-grid"></div>
-    </section>
-    <section class="gka-section">
-      <h2>Bookede tider</h2>
-      <div id="gka-bookings"></div>
-    </section>
-    <section class="gka-section">
-      <h2>Stengte tider og spesialpriser</h2>
-      <div id="gka-closed-times" class="gka-loading">Laster stengte tider…</div>
-      <div class="gka-note">Foreløpig er dette lesevisning fra gk-booking-admin-koden. Neste steg er å gjøre denne delen redigerbar.</div>
-    </section>
-    <div class="gka-note">Merk: Denne oversikten leser produktvarianter og viser tider der lager er 0. Den viser foreløpig ikke kundenavn. Kundedata kan vi legge til senere via ordre-API i en sikret Cloudflare Worker.</div>
-  `;
+  function setMsg(id, text, type) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.className = "gba-msg" + (type ? " " + type : "");
+    el.textContent = text || "";
+    el.style.display = text ? "block" : "none";
+  }
 
-  var statusEl = document.getElementById("gka-status");
-  var summaryEl = document.getElementById("gka-summary");
-  var bookingsEl = document.getElementById("gka-bookings");
-  var refreshBtn = document.getElementById("gka-refresh");
-  var closedTimesEl = document.getElementById("gka-closed-times");
-  var activeRange = "today";
-  var allBookings = [];
-  var closedConfig = null;
+  function loadSupabase(cb) {
+    if (window.supabase && window.supabase.createClient) {
+      client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      cb();
+      return;
+    }
 
-  function pad2(n){ return String(n).padStart(2,"0"); }
-  function todayLocal(){ var n=new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); }
-  function addDays(d,n){ var x=new Date(d.getTime()); x.setDate(x.getDate()+n); return x; }
-  function ymd(d){ return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
-  function parseYmd(s){ var m=String(s||"").match(/^(\d{4})-(\d{2})-(\d{2})$/); return m?new Date(Number(m[1]),Number(m[2])-1,Number(m[3])):null; }
-  function normalizeTime(t){ var s=String(t||"").trim(); var m=s.match(/^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$/); return m?pad2(Number(m[1]))+":"+m[2]+"-"+pad2(Number(m[3]))+":"+m[4]:s; }
-  function dateLabel(dateStr){ var d=parseYmd(dateStr); if(!d)return dateStr; var days=["Søn","Man","Tir","Ons","Tor","Fre","Lør"]; return days[d.getDay()]+" "+pad2(d.getDate())+"."+pad2(d.getMonth()+1); }
+    var s = document.createElement("script");
+    s.src = SUPABASE_JS;
+    s.async = true;
+    s.onload = function () {
+      client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      cb();
+    };
+    s.onerror = function () {
+      render("<div class='gba-wrap'><div class='gba-hero'><div class='gba-title'>Kunne ikke laste Supabase</div><div class='gba-sub'>Prøv å laste siden på nytt.</div></div></div>");
+    };
+    document.head.appendChild(s);
+  }
 
-  function parseVariantDateTime(v){
-    var date="", time="";
-    if(v && Array.isArray(v.values)){
-      for(var i=0;i<v.values.length;i++){
-        var item=v.values[i]||{};
-        var name=String(item.name||"").toLowerCase();
-        var val=String(item.val||"").trim();
-        if(!date && name.indexOf("dag")!==-1 && val) date=val;
-        if(!time && name.indexOf("tid")!==-1 && val) time=normalizeTime(val);
+  function renderLogin() {
+    render(
+      "<div class='gba-wrap'>" +
+      "  <section class='gba-hero'>" +
+      "    <div class='gba-kicker'>GolfKongen booking-admin</div>" +
+      "    <div class='gba-title'>Logg inn som admin</div>" +
+      "    <div class='gba-sub'>Bare godkjente admin-eposter får tilgang. Du får en innloggingslenke på e-post.</div>" +
+      "  </section>" +
+      "  <section class='gba-card'>" +
+      "    <div class='gba-row cols2'>" +
+      "      <label class='gba-field'><span class='gba-label'>E-post</span><input id='gba-email' class='gba-input' type='email' placeholder='din@epost.no'></label>" +
+      "      <div class='gba-field'><span class='gba-label'>&nbsp;</span><button id='gba-login-btn' class='gba-btn primary'>Send innloggingslenke</button></div>" +
+      "    </div>" +
+      "    <div id='gba-login-msg' class='gba-msg' style='display:none;margin-top:12px'></div>" +
+      "  </section>" +
+      "</div>"
+    );
+
+    document.getElementById("gba-login-btn").onclick = function () {
+      var email = String(document.getElementById("gba-email").value || "").trim().toLowerCase();
+      if (!email) {
+        setMsg("gba-login-msg", "Skriv inn e-post først.", "bad");
+        return;
       }
-    }
-    var sku=String((v&&v.sku)||"").trim();
-    var m=sku.match(/^(\d{4}-\d{2}-\d{2})-(\d{2})(\d{2})-(\d{2})(\d{2})$/);
-    if(m){ if(!date)date=m[1]; if(!time)time=m[2]+":"+m[3]+"-"+m[4]+":"+m[5]; }
-    return {date:date,time:normalizeTime(time)};
-  }
 
-  function priceOf(v, product){
-    var p=Number(String((v&&v.price)||"").replace(",","."));
-    if(isNaN(p)||p<=0) p=Number(String((product&&product.price)||"0").replace(",","."));
-    return isNaN(p)?0:p;
-  }
-
-  function rangeDates(range){
-    var start=todayLocal(), end=todayLocal();
-    if(range==="tomorrow"){ start=addDays(start,1); end=addDays(end,1); }
-    else if(range==="7"){ end=addDays(end,6); }
-    else if(range==="40"){ end=addDays(end,39); }
-    return {from:ymd(start),to:ymd(end)};
-  }
-
-  function inRange(dateStr, range){
-    var r=rangeDates(range);
-    return dateStr>=r.from && dateStr<=r.to;
-  }
-
-  function fetchProduct(config){
-    return fetch(API_BASE+config.id,{credentials:"omit"})
-      .then(function(r){return r.json();})
-      .then(function(j){return {config:config, product:j&&j.product?j.product:null};})
-      .catch(function(e){console.warn("[BOOKING ADMIN] Kunne ikke hente produkt "+config.id,e); return {config:config,product:null,error:e};});
-  }
-
-  function buildBookings(results){
-    var list=[];
-    results.forEach(function(res){
-      var config=res.config;
-      var product=res.product;
-      var variants=product&&Array.isArray(product.variants)?product.variants:[];
-      variants.forEach(function(v){
-        var dt=parseVariantDateTime(v);
-        if(!dt.date||!dt.time) return;
-        var qty=parseInt(v.qty||"0",10);
-        if(isNaN(qty)) qty=0;
-        if(qty>0) return;
-        list.push({
-          productId:config.id,
-          productName:config.name,
-          icon:config.icon,
-          date:dt.date,
-          time:dt.time,
-          sku:String(v.sku||""),
-          variantId:String(v.id||""),
-          price:priceOf(v,product)
-        });
+      setMsg("gba-login-msg", "Sender innloggingslenke…", "");
+      client.auth.signInWithOtp({
+        email: email,
+        options: {
+          emailRedirectTo: window.location.origin + ALLOWED_PATH
+        }
+      }).then(function (res) {
+        if (res.error) {
+          setMsg("gba-login-msg", res.error.message || "Kunne ikke sende lenke.", "bad");
+        } else {
+          setMsg("gba-login-msg", "Sjekk e-posten din og åpne innloggingslenken.", "ok");
+        }
       });
+    };
+  }
+
+  function renderDenied(email) {
+    render(
+      "<div class='gba-wrap'>" +
+      "  <section class='gba-hero'>" +
+      "    <div class='gba-kicker'>Ingen tilgang</div>" +
+      "    <div class='gba-title'>Denne siden er stengt</div>" +
+      "    <div class='gba-sub'>Du er innlogget som <strong>" + esc(email || "") + "</strong>, men denne e-posten er ikke godkjent som booking-admin.</div>" +
+      "    <div class='gba-actions' style='margin-top:14px'><button id='gba-logout' class='gba-btn'>Logg ut</button></div>" +
+      "  </section>" +
+      "</div>"
+    );
+    document.getElementById("gba-logout").onclick = function () {
+      client.auth.signOut().then(init);
+    };
+  }
+
+  function productLabels(ids) {
+    ids = Array.isArray(ids) ? ids : ["all"];
+    return ids.map(function (id) {
+      id = String(id);
+      return PRODUCT_NAMES[id] || (id === "all" ? "Alle" : id);
     });
-    list.sort(function(a,b){return (a.date+" "+a.time).localeCompare(b.date+" "+b.time);});
-    return list;
   }
 
-  function renderSummary(filtered){
-    summaryEl.innerHTML="";
-    PRODUCTS.forEach(function(p){
-      var count=filtered.filter(function(b){return b.productId===p.id;}).length;
-      var card=document.createElement("div");
-      card.className="gka-card";
-      card.innerHTML="<div class='gka-card-title'><h3>"+p.icon+" "+p.name+"</h3><span class='gka-badge "+(count?"warn":"ok")+"'>"+count+" booket</span></div><div class='gka-small'>Viser lager 0 i valgt periode.</div>";
-      summaryEl.appendChild(card);
-    });
-  }
+  function renderRulesTable() {
+    var el = document.getElementById("gba-rules");
+    if (!el) return;
 
-  function renderBookings(){
-    var filtered=allBookings.filter(function(b){return inRange(b.date,activeRange);});
-    renderSummary(filtered);
-    if(!filtered.length){
-      bookingsEl.innerHTML="<div class='gka-empty'>Ingen bookede tider i valgt periode.</div>";
-      return;
-    }
-    var html="<div class='gka-table-wrap'><table class='gka-table'><thead><tr><th>Dato</th><th>Tid</th><th>Aktivitet</th><th>Pris</th><th>Variant</th></tr></thead><tbody>";
-    filtered.forEach(function(b){
-      html+="<tr><td><strong>"+dateLabel(b.date)+"</strong><br><span class='gka-small'>"+b.date+"</span></td><td><strong>"+b.time+"</strong></td><td>"+b.icon+" "+b.productName+"</td><td>"+Math.round(b.price||0)+" kr</td><td><span class='gka-small'>"+b.sku+"</span></td></tr>";
-    });
-    html+="</tbody></table></div>";
-    bookingsEl.innerHTML=html;
-  }
-
-  function setRange(range){
-    activeRange=range;
-    document.querySelectorAll(".gka-btn[data-range]").forEach(function(btn){
-      btn.classList.toggle("active",btn.getAttribute("data-range")===range);
-    });
-    renderBookings();
-  }
-
-
-  function productNameFromRule(rule) {
-    var p = rule.products || rule.product || "all";
-    if (p === "all") return "Alle aktiviteter";
-    var arr = Array.isArray(p) ? p : [String(p)];
-    return arr.map(function (id) {
-      var found = PRODUCTS.find(function (x) { return x.id === String(id); });
-      return found ? found.name : String(id);
-    }).join(", ");
-  }
-
-  function renderClosedTimes() {
-    if (!closedTimesEl) return;
-
-    var data = closedConfig || {};
-    var closedDates = Array.isArray(data.closedDates) ? data.closedDates : [];
-    var closedTimes = Array.isArray(data.closedTimes) ? data.closedTimes : [];
-    var specialPrices = Array.isArray(data.specialPrices) ? data.specialPrices : [];
-
-    if (!closedDates.length && !closedTimes.length && !specialPrices.length) {
-      closedTimesEl.className = "";
-      closedTimesEl.innerHTML = "<div class='gka-empty'>Ingen manuelle stenginger eller spesialpriser er lagt inn.</div>";
+    if (!rules.length) {
+      el.innerHTML = "<div class='gba-msg'>Ingen regler er lagt inn ennå.</div>";
       return;
     }
 
-    var html = "<div class='gka-table-wrap'><table class='gka-table'><thead><tr><th>Type</th><th>Dato</th><th>Tid</th><th>Gjelder</th><th>Årsak/pris</th></tr></thead><tbody>";
+    var html = "<div class='gba-table-wrap'><table class='gba-table'><thead><tr>" +
+      "<th>Type</th><th>Navn</th><th>Dato</th><th>Tid</th><th>Produkter</th><th>Pris</th><th>Status</th><th></th>" +
+      "</tr></thead><tbody>";
 
-    closedDates.forEach(function (r) {
-      html += "<tr><td><strong>Hel dag</strong></td><td>" + (r.date || "") + "</td><td>Hele dagen</td><td>" + productNameFromRule(r) + "</td><td>" + (r.reason || "Stengt") + "</td></tr>";
-    });
-
-    closedTimes.forEach(function (r) {
-      html += "<tr><td><strong>Tidsrom</strong></td><td>" + (r.date || "") + "</td><td>" + (r.from || "") + "–" + (r.to || "") + "</td><td>" + productNameFromRule(r) + "</td><td>" + (r.reason || "Stengt") + "</td></tr>";
-    });
-
-    specialPrices.forEach(function (r) {
-      html += "<tr><td><strong>Spesialpris</strong></td><td>" + (r.date || "") + "</td><td>" + (r.from || "") + "–" + (r.to || "") + "</td><td>" + productNameFromRule(r) + "</td><td>" + (r.price || "") + " kr · " + (r.reason || "") + "</td></tr>";
+    rules.forEach(function (r) {
+      var typeClass = r.rule_type === "price" ? "price" : "closed";
+      var typeText = r.rule_type === "price" ? "Prisregel" : "Stengt";
+      var p = productLabels(r.product_ids).map(function (x) { return "<span class='gba-pill'>" + esc(x) + "</span>"; }).join(" ");
+      html += "<tr>" +
+        "<td><span class='gba-pill " + typeClass + "'>" + typeText + "</span></td>" +
+        "<td><strong>" + esc(r.title) + "</strong><br><span class='gba-muted'>" + esc(r.description || "") + "</span></td>" +
+        "<td>" + esc(r.date_from) + (r.date_to !== r.date_from ? " → " + esc(r.date_to) : "") + "</td>" +
+        "<td>" + esc((r.time_from || "Hele dagen").slice(0,5)) + (r.time_to ? "–" + esc(String(r.time_to).slice(0,5)) : "") + "</td>" +
+        "<td>" + p + "</td>" +
+        "<td>" + (r.rule_type === "price" ? esc(r.price || "") + " kr" : "—") + "</td>" +
+        "<td>" + (r.active ? "Aktiv" : "Av") + "</td>" +
+        "<td><button class='gba-btn danger' data-del='" + esc(r.id) + "'>Slett</button></td>" +
+      "</tr>";
     });
 
     html += "</tbody></table></div>";
-    closedTimesEl.className = "";
-    closedTimesEl.innerHTML = html;
-  }
+    el.innerHTML = html;
 
-  function loadClosedTimes() {
-    if (!closedTimesEl) return Promise.resolve();
-
-    closedTimesEl.className = "gka-loading";
-    closedTimesEl.textContent = "Laster stengte tider…";
-
-    return fetch(ADMIN_API_BASE + "/booking/closed-times", { credentials: "omit" })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        closedConfig = data || {};
-        renderClosedTimes();
-        console.log("[BOOKING ADMIN] Stengte tider klar", closedConfig);
-      })
-      .catch(function (e) {
-        console.warn("[BOOKING ADMIN] Kunne ikke hente stengte tider", e);
-        closedTimesEl.className = "gka-error";
-        closedTimesEl.textContent = "Kunne ikke laste stengte tider.";
-      });
-  }
-
-
-  function load(){
-    statusEl.className="gka-loading";
-    statusEl.textContent="Laster bookingdata…";
-    summaryEl.innerHTML="";
-    bookingsEl.innerHTML="";
-    loadClosedTimes();
-    Promise.all(PRODUCTS.map(fetchProduct)).then(function(results){
-      allBookings=buildBookings(results);
-      statusEl.className="";
-      statusEl.innerHTML="Sist oppdatert: "+new Date().toLocaleString("no-NO")+" · Totalt bookede varianter funnet: "+allBookings.length;
-      renderBookings();
-      console.log("[BOOKING ADMIN] Data klar",{products:results,bookings:allBookings});
-    }).catch(function(e){
-      console.error("[BOOKING ADMIN] Feil:",e);
-      statusEl.className="gka-error";
-      statusEl.textContent="Kunne ikke laste bookingdata.";
+    el.querySelectorAll("[data-del]").forEach(function (btn) {
+      btn.onclick = function () {
+        var id = btn.getAttribute("data-del");
+        if (!confirm("Slette denne regelen?")) return;
+        deleteRule(id);
+      };
     });
   }
 
-  document.querySelectorAll(".gka-btn[data-range]").forEach(function(btn){
-    btn.onclick=function(){ setRange(btn.getAttribute("data-range")); };
-  });
-  refreshBtn.onclick=load;
-  load();
+  function renderAdmin() {
+    var productChecks = PRODUCT_LIST.map(function (p, idx) {
+      return "<label class='gba-check'><input type='checkbox' name='gba-product' value='" + esc(p.id) + "'" + (idx === 0 ? " checked" : "") + "> " + esc(p.name) + "</label>";
+    }).join("");
+
+    render(
+      "<div class='gba-wrap'>" +
+      "  <section class='gba-hero'>" +
+      "    <div class='gba-topbar'>" +
+      "      <div>" +
+      "        <div class='gba-kicker'>GolfKongen intern bookingverktøy</div>" +
+      "        <div class='gba-title'>Booking-admin</div>" +
+      "        <div class='gba-sub'>Innlogget som <strong>" + esc(currentUser.email) + "</strong>. Her kan du stenge dager/tider og legge inn prisregler.</div>" +
+      "      </div>" +
+      "      <button id='gba-logout' class='gba-btn'>Logg ut</button>" +
+      "    </div>" +
+      "  </section>" +
+
+      "  <section class='gba-card'>" +
+      "    <h2>Ny regel</h2>" +
+      "    <div class='gba-row cols3'>" +
+      "      <label class='gba-field'><span class='gba-label'>Type</span><select id='gba-rule-type' class='gba-select'><option value='closed'>Stenging</option><option value='price'>Prisjustering</option></select></label>" +
+      "      <label class='gba-field'><span class='gba-label'>Navn</span><input id='gba-title' class='gba-input' placeholder='Ferie, helligdag, privat arrangement, trening'></label>" +
+      "      <label class='gba-field'><span class='gba-label'>Pris ved prisregel</span><input id='gba-price' class='gba-input' type='number' min='0' step='1' placeholder='f.eks. 100'></label>" +
+      "    </div>" +
+      "    <div class='gba-row cols3' style='margin-top:10px'>" +
+      "      <label class='gba-field'><span class='gba-label'>Fra dato</span><input id='gba-date-from' class='gba-input' type='date'></label>" +
+      "      <label class='gba-field'><span class='gba-label'>Til dato</span><input id='gba-date-to' class='gba-input' type='date'></label>" +
+      "      <label class='gba-field'><span class='gba-label'>Beskrivelse</span><input id='gba-description' class='gba-input' placeholder='Valgfritt'></label>" +
+      "    </div>" +
+      "    <div class='gba-row cols2' style='margin-top:10px'>" +
+      "      <label class='gba-field'><span class='gba-label'>Fra klokke</span><input id='gba-time-from' class='gba-input' type='time'></label>" +
+      "      <label class='gba-field'><span class='gba-label'>Til klokke</span><input id='gba-time-to' class='gba-input' type='time'></label>" +
+      "    </div>" +
+      "    <div class='gba-field' style='margin-top:10px'><span class='gba-label'>Gjelder produkter</span><div class='gba-products'>" + productChecks + "</div></div>" +
+      "    <div class='gba-actions' style='margin-top:14px'>" +
+      "      <button id='gba-save' class='gba-btn primary'>Lagre regel</button>" +
+      "      <button id='gba-refresh' class='gba-btn'>Oppdater liste</button>" +
+      "    </div>" +
+      "    <div id='gba-save-msg' class='gba-msg' style='display:none;margin-top:12px'></div>" +
+      "  </section>" +
+
+      "  <section class='gba-card'>" +
+      "    <h2>Regler</h2>" +
+      "    <div id='gba-rules'><div class='gba-msg'>Laster regler…</div></div>" +
+      "  </section>" +
+      "</div>"
+    );
+
+    document.getElementById("gba-logout").onclick = function () {
+      client.auth.signOut().then(init);
+    };
+    document.getElementById("gba-refresh").onclick = loadRules;
+    document.getElementById("gba-save").onclick = saveRule;
+
+    document.querySelectorAll("input[name='gba-product']").forEach(function (cb) {
+      cb.addEventListener("change", function () {
+        if (cb.value === "all" && cb.checked) {
+          document.querySelectorAll("input[name='gba-product']").forEach(function (x) {
+            if (x.value !== "all") x.checked = false;
+          });
+        } else if (cb.value !== "all" && cb.checked) {
+          var all = document.querySelector("input[name='gba-product'][value='all']");
+          if (all) all.checked = false;
+        }
+      });
+    });
+
+    loadRules();
+  }
+
+  function getSelectedProducts() {
+    var vals = [];
+    document.querySelectorAll("input[name='gba-product']:checked").forEach(function (cb) {
+      vals.push(cb.value);
+    });
+    return vals.length ? vals : ["all"];
+  }
+
+  function saveRule() {
+    var type = document.getElementById("gba-rule-type").value;
+    var title = String(document.getElementById("gba-title").value || "").trim();
+    var description = String(document.getElementById("gba-description").value || "").trim();
+    var dateFrom = document.getElementById("gba-date-from").value;
+    var dateTo = document.getElementById("gba-date-to").value || dateFrom;
+    var timeFrom = document.getElementById("gba-time-from").value || null;
+    var timeTo = document.getElementById("gba-time-to").value || null;
+    var priceRaw = document.getElementById("gba-price").value;
+    var price = type === "price" && priceRaw !== "" ? Number(priceRaw) : null;
+
+    if (!title) return setMsg("gba-save-msg", "Skriv inn navn på regelen.", "bad");
+    if (!dateFrom) return setMsg("gba-save-msg", "Velg fra dato.", "bad");
+    if (!dateTo) dateTo = dateFrom;
+    if (timeFrom && !timeTo) return setMsg("gba-save-msg", "Velg til klokke også.", "bad");
+    if (!timeFrom && timeTo) return setMsg("gba-save-msg", "Velg fra klokke også.", "bad");
+    if (type === "price" && (price === null || isNaN(price))) return setMsg("gba-save-msg", "Skriv inn pris for prisregel.", "bad");
+
+    var payload = {
+      rule_type: type,
+      title: title,
+      description: description || null,
+      product_ids: getSelectedProducts(),
+      date_from: dateFrom,
+      date_to: dateTo,
+      time_from: timeFrom,
+      time_to: timeTo,
+      price: price,
+      active: true,
+      created_by: currentUser.email
+    };
+
+    setMsg("gba-save-msg", "Lagrer…", "");
+    client.from("gk_booking_rules").insert(payload).select().single().then(function (res) {
+      if (res.error) {
+        setMsg("gba-save-msg", res.error.message || "Kunne ikke lagre.", "bad");
+        return;
+      }
+
+      setMsg("gba-save-msg", "Regelen er lagret.", "ok");
+      document.getElementById("gba-title").value = "";
+      document.getElementById("gba-description").value = "";
+      document.getElementById("gba-price").value = "";
+      loadRules();
+    });
+  }
+
+  function loadRules() {
+    client.from("gk_booking_rules")
+      .select("*")
+      .order("date_from", { ascending: true })
+      .order("time_from", { ascending: true })
+      .then(function (res) {
+        if (res.error) {
+          rules = [];
+          var el = document.getElementById("gba-rules");
+          if (el) el.innerHTML = "<div class='gba-msg bad'>" + esc(res.error.message || "Kunne ikke laste regler.") + "</div>";
+          return;
+        }
+        rules = res.data || [];
+        renderRulesTable();
+      });
+  }
+
+  function deleteRule(id) {
+    client.from("gk_booking_rules").delete().eq("id", id).then(function (res) {
+      if (res.error) {
+        alert(res.error.message || "Kunne ikke slette.");
+        return;
+      }
+      loadRules();
+    });
+  }
+
+  function checkAdminAndRender() {
+    render("<div class='gba-wrap'><div class='gba-hero'><div class='gba-title'>Sjekker tilgang…</div><div class='gba-sub'>Et øyeblikk.</div></div></div>");
+
+    client.from("gk_booking_admins")
+      .select("*")
+      .eq("email", currentUser.email)
+      .eq("active", true)
+      .maybeSingle()
+      .then(function (res) {
+        if (res.error) {
+          render("<div class='gba-wrap'><div class='gba-hero'><div class='gba-title'>Feil ved tilgangssjekk</div><div class='gba-sub'>" + esc(res.error.message) + "</div></div></div>");
+          return;
+        }
+
+        if (!res.data) {
+          renderDenied(currentUser.email);
+          return;
+        }
+
+        currentAdmin = res.data;
+        renderAdmin();
+      });
+  }
+
+  function init() {
+    cssOnce();
+
+    client.auth.getSession().then(function (res) {
+      var session = res.data && res.data.session ? res.data.session : null;
+      currentUser = session && session.user ? session.user : null;
+
+      if (!currentUser) {
+        renderLogin();
+        return;
+      }
+
+      checkAdminAndRender();
+    });
+  }
+
+  cssOnce();
+  render("<div class='gba-wrap'><div class='gba-hero'><div class='gba-title'>Laster admin…</div></div></div>");
+  loadSupabase(init);
 })();
