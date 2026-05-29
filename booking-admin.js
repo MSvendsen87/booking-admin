@@ -1,5 +1,5 @@
 (function () {
-  console.log("[BOOKING ADMIN v6.1 BOOKINGER ØVERST] LOADED");
+  console.log("[BOOKING ADMIN v6.2 MOBILTILPASSET] LOADED");
 
   var ALLOWED_PATH = "/sider/booking-admin";
   var path = String(window.location.pathname || "");
@@ -93,7 +93,60 @@
       ".gba-pill.closed{border-color:rgba(255,95,95,.35);background:rgba(255,95,95,.10);color:#ffd0d0}" +
       ".gba-pill.price{border-color:rgba(240,193,75,.35);background:rgba(240,193,75,.10);color:#ffe4a3}" +
       ".gba-topbar{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center}" +
-      ".gba-muted{color:rgba(244,247,251,.62);font-size:13px}";
+      ".gba-muted{color:rgba(244,247,251,.62);font-size:13px}" +
+
+      "@media(max-width:760px){" +
+      "#gk-booking-admin{padding:10px 8px 18px}" +
+      ".gba-wrap{gap:12px}" +
+      ".gba-hero{padding:14px;border-radius:18px}" +
+      ".gba-title{font-size:25px;line-height:1.08}" +
+      ".gba-sub{font-size:13px}" +
+      ".gba-card{padding:12px;border-radius:16px}" +
+      ".gba-card h2{font-size:17px;margin-bottom:9px}" +
+      ".gba-topbar{align-items:stretch;gap:10px}" +
+      ".gba-topbar>div{width:100%}" +
+      ".gba-topbar .gba-btn{width:100%}" +
+      ".gba-actions{display:grid;grid-template-columns:1fr;gap:8px}" +
+      ".gba-btn{width:100%;min-height:43px;padding:10px 12px;font-size:13px}" +
+      ".gba-input,.gba-select,.gba-textarea{min-height:43px;font-size:16px;padding:10px 11px}" +
+      ".gba-label{font-size:11px}" +
+      ".gba-msg{font-size:12px;padding:10px 11px;border-radius:12px}" +
+      ".gba-products{grid-template-columns:1fr;gap:7px}" +
+      ".gba-weekdays{grid-template-columns:1fr 1fr;gap:7px}" +
+      ".gba-check{padding:9px;border-radius:11px;font-size:12px}" +
+      ".gba-table-wrap{border:0;overflow:visible}" +
+      ".gba-table{min-width:0;border-collapse:separate;border-spacing:0 10px}" +
+      ".gba-table thead{display:none}" +
+      ".gba-table tbody,.gba-table tr,.gba-table td{display:block;width:100%}" +
+      ".gba-table tr{border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.045);border-radius:14px;padding:10px;margin-bottom:10px}" +
+      ".gba-table td{border:0!important;padding:6px 0!important;font-size:13px}" +
+      ".gba-table td:before{display:block;color:rgba(244,247,251,.52);font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:1000;margin-bottom:3px}" +
+      "#gba-future-bookings .gba-table td:nth-child(1):before{content:'Dato'}" +
+      "#gba-future-bookings .gba-table td:nth-child(2):before{content:'Tid'}" +
+      "#gba-future-bookings .gba-table td:nth-child(3):before{content:'Booking'}" +
+      "#gba-future-bookings .gba-table td:nth-child(4):before{content:'Status'}" +
+      "#gba-future-bookings .gba-table td:nth-child(5):before{content:'Pris'}" +
+      "#gba-future-bookings .gba-table td:nth-child(6):before{content:'Variant / SKU'}" +
+      "#gba-rules .gba-table td:nth-child(1):before{content:'Type'}" +
+      "#gba-rules .gba-table td:nth-child(2):before{content:'Navn'}" +
+      "#gba-rules .gba-table td:nth-child(3):before{content:'Dato'}" +
+      "#gba-rules .gba-table td:nth-child(4):before{content:'Dager'}" +
+      "#gba-rules .gba-table td:nth-child(5):before{content:'Tid'}" +
+      "#gba-rules .gba-table td:nth-child(6):before{content:'Produkter'}" +
+      "#gba-rules .gba-table td:nth-child(7):before{content:'Pris'}" +
+      "#gba-rules .gba-table td:nth-child(8):before{content:'Status'}" +
+      "#gba-rules .gba-table td:nth-child(9):before{content:'Handling'}" +
+      "#gba-sync-results .gba-table td:nth-child(1):before{content:'Produkt'}" +
+      "#gba-sync-results .gba-table td:nth-child(2):before{content:'Status'}" +
+      "#gba-sync-results .gba-table td:nth-child(3):before{content:'Resultat'}" +
+      ".gba-pill{font-size:11px;padding:5px 7px}" +
+      "}" +
+
+      "@media(max-width:430px){" +
+      ".gba-weekdays{grid-template-columns:1fr}" +
+      ".gba-title{font-size:23px}" +
+      ".gba-card{padding:11px}" +
+      "}";
 
     var st = document.createElement("style");
     st.id = "gk-booking-admin-v3-css";
